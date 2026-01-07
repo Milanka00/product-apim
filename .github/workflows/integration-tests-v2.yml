@@ -25,9 +25,6 @@ jobs:
           --health-interval 10s 
           --health-timeout 5s 
           --health-retries 5
-          --character-set-server=latin1
-          --collation-server=latin1_swedish_ci
-          --default-authentication-plugin=mysql_native_password
 
       shared_db:
         image: mysql:8.0
@@ -43,9 +40,7 @@ jobs:
           --health-interval 10s 
           --health-timeout 5s 
           --health-retries 5
-          --character-set-server=latin1
-          --collation-server=latin1_swedish_ci
-          --default-authentication-plugin=mysql_native_password
+
 
     steps:
       - name: Checkout code
