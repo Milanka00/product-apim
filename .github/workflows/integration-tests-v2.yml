@@ -109,6 +109,7 @@ jobs:
 #          else
 #            echo "Warning: No Shared DB dump file found in ./dumps/"
 #          fi
+
       - name: Install gdown
         run: |
           sudo apt-get update
@@ -118,22 +119,24 @@ jobs:
       - name: Download and restore APIM DB dump
         run: |
           mkdir -p dumps
-          APIM_FILE_ID="1sz3rInFW8VyY9HkK8qe-0ymoi0_X6SVV"
+          APIM_URL="https://drive.google.com/file/d/1cukuKLcQwkuCDhEACqrmkSen7Dea2SCx/view?usp=sharing"
           echo "Downloading APIM DB dump from Google Drive..."
-          gdown "https://drive.google.com/uc?id=${APIM_FILE_ID}" -O dumps/apim_db_dump.sql
+          gdown --fuzzy "${APIM_URL}" -O dumps/apim_db_dump.sql
 
           APIM_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3306" --format "{{.ID}}" | head -n 1)
+          echo "APIM DB container: ${APIM_DB_CONTAINER}"
           docker cp dumps/apim_db_dump.sql ${APIM_DB_CONTAINER}:/apim_db_dump.sql
           docker exec -i ${APIM_DB_CONTAINER} sh -c 'mysql -uapim_user -papimpass WSO2AM_APIMGT_DB < /apim_db_dump.sql'
 
       - name: Download and restore Shared DB dump
         run: |
           mkdir -p dumps
-          SHARED_FILE_ID="1OyfIEKLGriG27QZxaqv1Q3wmvqVB1wqJ"
+          SHARED_URL="https://drive.google.com/file/d/1UeR2rcnjEpaLkvjCjC39Tb35bZXUjMKT/view?usp=sharing"
           echo "Downloading Shared DB dump from Google Drive..."
-          gdown "https://drive.google.com/uc?id=${SHARED_FILE_ID}" -O dumps/shared_db_dump.sql
+          gdown --fuzzy "${SHARED_URL}" -O dumps/shared_db_dump.sql
 
           SHARED_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3307" --format "{{.ID}}" | head -n 1)
+          echo "Shared DB container: ${SHARED_DB_CONTAINER}"
           docker cp dumps/shared_db_dump.sql ${SHARED_DB_CONTAINER}:/shared_db_dump.sql
           docker exec -i ${SHARED_DB_CONTAINER} sh -c 'mysql -ushared_user -psharedpass WSO2AM_COMMON_DB < /shared_db_dump.sql'
 
