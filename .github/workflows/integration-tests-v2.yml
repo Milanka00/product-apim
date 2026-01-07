@@ -3,7 +3,7 @@ name: Integration Tests v2
 on:
   pull_request:
     branches:
-      - master
+      - master-new-test-framework-milanka
   workflow_dispatch:
 
 jobs:
