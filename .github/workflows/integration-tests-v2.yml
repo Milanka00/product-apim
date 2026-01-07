@@ -1,10 +1,10 @@
 name: Integration Tests v2
 
 on:
-  pull_request:
+  workflow_dispatch:
+  push:
     branches:
       - master-new-test-framework-milanka
-  workflow_dispatch:
 
 jobs:
   db-integration-tests:
@@ -21,9 +21,9 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping -uroot -prootpass" 
-          --health-interval 10s 
-          --health-timeout 5s 
+          --health-cmd "mysqladmin ping -uroot -prootpass"
+          --health-interval 10s
+          --health-timeout 5s
           --health-retries 5
 
       shared_db:
@@ -36,15 +36,16 @@ jobs:
         ports:
           - 3307:3306
         options: >-
-          --health-cmd "mysqladmin ping -uroot -prootpass" 
-          --health-interval 10s 
-          --health-timeout 5s 
+          --health-cmd "mysqladmin ping -uroot -prootpass"
+          --health-interval 10s
+          --health-timeout 5s
           --health-retries 5
-
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: master-new-test-framework-milanka
 
       - name: Set up JDK 11
         uses: actions/setup-java@v2
@@ -56,20 +57,21 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.m2
-          key: ${{ runner.os }}-m2
-          restore-keys: ${{ runner.os }}-m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
 
-      - name: Install MySQL client
-        run: sudo apt-get update && sudo apt-get install -y default-mysql-client
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client python3 python3-pip
+          pip3 install gdown
 
       - name: Wait for DBs to be ready
         run: |
           echo "Waiting for databases..."
-          
-          # wait up to ~2 minutes for each DB
           for i in {1..60}; do
-            if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpass --silent; then
-              echo "apim_db is up"
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpass --silent 2>/dev/null; then
+              echo "apim_db is ready"
               break
             fi
             echo "Waiting for apim_db... ($i/60)"
@@ -77,44 +79,13 @@ jobs:
           done
           
           for i in {1..60}; do
-            if mysqladmin ping -h 127.0.0.1 -P 3307 -uroot -prootpass --silent; then
-              echo "shared_db is up"
+            if mysqladmin ping -h 127.0.0.1 -P 3307 -uroot -prootpass --silent 2>/dev/null; then
+              echo "shared_db is ready"
               break
             fi
             echo "Waiting for shared_db... ($i/60)"
             sleep 2
           done
-          
-          
-
-#      - name: Restore DB dumps
-#        run: |
-#          # Find the container IDs for the service containers
-#          APIM_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3306" --format "{{.ID}}" | head -n 1)
-#          SHARED_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3307" --format "{{.ID}}" | head -n 1)
-#
-#          # Apply dumps if they exist
-#          if [ -f ./dumps/apim_db_450_dump.sql ]; then
-#            echo "Applying apim_db dump..."
-#            docker cp ./dumps/apim_db_450_dump.sql ${APIM_DB_CONTAINER}:/apim_db_450_dump.sql
-#            docker exec -i ${APIM_DB_CONTAINER} sh -c 'mysql -uapim_user -papimpass WSO2AM_APIMGT_DB < /apim_db_450_dump.sql'
-#          else
-#            echo "Warning: No APIM DB dump file found in ./dumps/"
-#          fi
-#
-#          if [ -f ./dumps/shared_db_450_dump.sql ]; then
-#            echo "Applying shared_db dump..."
-#            docker cp ./dumps/shared_db_450_dump.sql ${SHARED_DB_CONTAINER}:/shared_db_450_dump.sql
-#            docker exec -i ${SHARED_DB_CONTAINER} sh -c 'mysql -ushared_user -psharedpass WSO2AM_COMMON_DB < /shared_db_450_dump.sql'
-#          else
-#            echo "Warning: No Shared DB dump file found in ./dumps/"
-#          fi
-
-      - name: Install gdown
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-pip
-          pip3 install gdown
 
       - name: Download and restore APIM DB dump
         run: |
@@ -140,7 +111,22 @@ jobs:
           docker cp dumps/shared_db_dump.sql ${SHARED_DB_CONTAINER}:/shared_db_dump.sql
           docker exec -i ${SHARED_DB_CONTAINER} sh -c 'mysql -ushared_user -psharedpass WSO2AM_COMMON_DB < /shared_db_dump.sql'
 
-      - name: Run Integration Tests
+      - name: Build APIM Product (Skip Tests)
+        run: |
+          echo "Building APIM product distribution (skipping tests)..."
+          mvn clean install -DskipTests \
+            --file all-in-one-apim/pom.xml
+          
+          # Verify the distribution zip was created
+          DIST_FILE=$(find all-in-one-apim/modules/distribution/product/target -name "wso2am-*.zip" | head -n 1)
+          if [ -z "$DIST_FILE" ]; then
+            echo "Error: Distribution zip file not found!"
+            exit 1
+          fi
+          echo "✓ Distribution file created: $DIST_FILE"
+          ls -lh "$DIST_FILE"
+
+      - name: Run Integration Tests with MySQL
         run: |
           mvn clean install \
             --file all-in-one-apim/modules/integration-v2/pom.xml \
@@ -148,7 +134,7 @@ jobs:
             -DskipBenchMarkTest=true \
             -DskipRestartTests=true
         env:
-          # API Manager Database (apim_db mapped to 3306 on host)
+          # API Manager Database (apim_db)
           API_MANAGER_DATABASE_TYPE: mysql
           API_MANAGER_DATABASE_DRIVER: com.mysql.cj.jdbc.Driver
           API_MANAGER_DATABASE_URL: jdbc:mysql://host.docker.internal:3306/WSO2AM_APIMGT_DB?allowPublicKeyRetrieval=true&useSSL=false
@@ -156,7 +142,7 @@ jobs:
           API_MANAGER_DATABASE_PASSWORD: apimpass
           API_MANAGER_DATABASE_VALIDATION_QUERY: SELECT 1
 
-          # Shared Database (shared_db mapped to 3307 on host)
+          # Shared Database (shared_db)
           SHARED_DATABASE_TYPE: mysql
           SHARED_DATABASE_DRIVER: com.mysql.cj.jdbc.Driver
           SHARED_DATABASE_URL: jdbc:mysql://host.docker.internal:3307/WSO2AM_COMMON_DB?allowPublicKeyRetrieval=true&useSSL=false
@@ -164,6 +150,7 @@ jobs:
           SHARED_DATABASE_PASSWORD: sharedpass
           SHARED_DATABASE_VALIDATION_QUERY: SELECT 1
 
+          # Test configuration
           GATEWAY_ENVIRONMENT: Production and Sandbox
           APIM_TEST_CONTAINERS_PARALLEL_ENABLED: False
           PARALLEL_THREAD_COUNT: 1
