@@ -1,0 +1,142 @@
+name: Integration Tests v2
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  db-integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      apim_db:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: WSO2AM_APIMGT_DB
+          MYSQL_USER: apim_user
+          MYSQL_PASSWORD: apimpass
+          MYSQL_ROOT_PASSWORD: rootpass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -prootpass" 
+          --health-interval 10s 
+          --health-timeout 5s 
+          --health-retries 5
+          --character-set-server=latin1
+          --collation-server=latin1_swedish_ci
+          --default-authentication-plugin=mysql_native_password
+
+      shared_db:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: WSO2AM_COMMON_DB
+          MYSQL_USER: shared_user
+          MYSQL_PASSWORD: sharedpass
+          MYSQL_ROOT_PASSWORD: rootpass
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -prootpass" 
+          --health-interval 10s 
+          --health-timeout 5s 
+          --health-retries 5
+          --character-set-server=latin1
+          --collation-server=latin1_swedish_ci
+          --default-authentication-plugin=mysql_native_password
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: 11.0.16+8
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y default-mysql-client
+
+      - name: Wait for DBs to be ready
+        run: |
+          echo "Waiting for databases..."
+          until mysqladmin ping -h apim_db -uroot -prootpass --silent; do
+            echo "Waiting for apim_db..."
+            sleep 2
+          done
+          until mysqladmin ping -h shared_db -uroot -prootpass --silent; do
+            echo "Waiting for shared_db..."
+            sleep 2
+          done
+          echo "Databases are ready!"
+
+      - name: Restore DB dumps
+        run: |
+          # Find the container IDs for the service containers
+          APIM_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3306" --format "{{.ID}}" | head -n 1)
+          SHARED_DB_CONTAINER=$(docker ps --filter "ancestor=mysql:8.0" --filter "publish=3307" --format "{{.ID}}" | head -n 1)
+          
+          # Apply dumps if they exist
+          if [ -f ./dumps/apim_db_450_dump.sql ]; then
+            echo "Applying apim_db dump..."
+            docker cp ./dumps/apim_db_450_dump.sql ${APIM_DB_CONTAINER}:/apim_db_450_dump.sql
+            docker exec -i ${APIM_DB_CONTAINER} sh -c 'mysql -uapim_user -papimpass WSO2AM_APIMGT_DB < /apim_db_450_dump.sql'
+          else
+            echo "Warning: No APIM DB dump file found in ./dumps/"
+          fi
+          
+          if [ -f ./dumps/shared_db_450_dump.sql ]; then
+            echo "Applying shared_db dump..."
+            docker cp ./dumps/shared_db_450_dump.sql ${SHARED_DB_CONTAINER}:/shared_db_450_dump.sql
+            docker exec -i ${SHARED_DB_CONTAINER} sh -c 'mysql -ushared_user -psharedpass WSO2AM_COMMON_DB < /shared_db_450_dump.sql'
+          else
+            echo "Warning: No Shared DB dump file found in ./dumps/"
+          fi
+
+      - name: Run Integration Tests
+        run: |
+          mvn clean install \
+            --file all-in-one-apim/modules/integration-v2/pom.xml \
+            -Pmigration \
+            -DskipBenchMarkTest=true \
+            -DskipRestartTests=true
+        env:
+          # API Manager Database (apim_db)
+          API_MANAGER_DATABASE_TYPE: mysql
+          API_MANAGER_DATABASE_DRIVER: com.mysql.cj.jdbc.Driver
+          API_MANAGER_DATABASE_URL: jdbc:mysql://apim_db:3306/WSO2AM_APIMGT_DB?allowPublicKeyRetrieval=true&useSSL=false
+          API_MANAGER_DATABASE_USERNAME: apim_user
+          API_MANAGER_DATABASE_PASSWORD: apimpass
+          API_MANAGER_DATABASE_VALIDATION_QUERY: SELECT 1
+
+          # Shared Database (shared_db)
+          SHARED_DATABASE_TYPE: mysql
+          SHARED_DATABASE_DRIVER: com.mysql.cj.jdbc.Driver
+          SHARED_DATABASE_URL: jdbc:mysql://shared_db:3306/WSO2AM_COMMON_DB?allowPublicKeyRetrieval=true&useSSL=false
+          SHARED_DATABASE_USERNAME: shared_user
+          SHARED_DATABASE_PASSWORD: sharedpass
+          SHARED_DATABASE_VALIDATION_QUERY: SELECT 1
+
+          # Test configuration
+          GATEWAY_ENVIRONMENT: Production and Sandbox
+          APIM_TEST_CONTAINERS_PARALLEL_ENABLED: False
+          PARALLEL_THREAD_COUNT: 1
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            all-in-one-apim/modules/integration-v2/tests-integration/**/target/surefire-reports/**
+          if-no-files-found: warn
