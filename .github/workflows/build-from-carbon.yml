@@ -1,0 +1,93 @@
+name: Carbon-apimgt update and build
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  update-and-build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      CARBON_APIMGT_REPO: https://github.com/wso2/carbon-apimgt.git
+      CARBON_APIMGT_VERSION_PROPERTY: carbon.apimgt.version
+
+    steps:
+      - name: Checkout product-apim
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: maven
+
+      - name: Find latest carbon-apimgt version tag
+        run: |
+          git ls-remote --tags "$CARBON_APIMGT_REPO" \
+            | awk '{print $2}' \
+            | grep -E 'refs/tags/v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sed 's#refs/tags/##' \
+            | sed 's/^v//' \
+            | sort -V \
+            | tail -n1 > latest_carbon_apimgt_version.txt
+
+          LATEST=$(cat latest_carbon_apimgt_version.txt)
+          echo "Latest carbon-apimgt version: $LATEST"
+          echo "LATEST_CARBON_APIMGT_VERSION=$LATEST" >> $GITHUB_ENV
+
+      - name: Read current carbon-apimgt version from Maven
+        working-directory: all-in-one-apim
+        run: |
+          CURRENT=$(mvn -q \
+            -Dexpression=${CARBON_APIMGT_VERSION_PROPERTY} \
+            -DforceStdout \
+            help:evaluate 2>/dev/null || true)
+
+          echo "Current carbon-apimgt version: $CURRENT"
+          echo "CURRENT_CARBON_APIMGT_VERSION=$CURRENT" >> $GITHUB_ENV
+
+      - name: Update pom.xml with latest carbon-apimgt version
+        if: env.LATEST_CARBON_APIMGT_VERSION != '' && env.LATEST_CARBON_APIMGT_VERSION != env.CURRENT_CARBON_APIMGT_VERSION
+        working-directory: all-in-one-apim
+        run: |
+          echo "Updating ${CARBON_APIMGT_VERSION_PROPERTY} from ${CURRENT_CARBON_APIMGT_VERSION} to ${LATEST_CARBON_APIMGT_VERSION}"
+
+          mvn -B \
+            org.codehaus.mojo:versions-maven-plugin:2.16.2:set-property \
+            -Dproperty=${CARBON_APIMGT_VERSION_PROPERTY} \
+            -DnewVersion=${LATEST_CARBON_APIMGT_VERSION} \
+            -DgenerateBackupPoms=false
+
+      - name: Commit and push version bump
+        if: env.LATEST_CARBON_APIMGT_VERSION != '' && env.LATEST_CARBON_APIMGT_VERSION != env.CURRENT_CARBON_APIMGT_VERSION
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -am "chore: bump carbon-apimgt to ${LATEST_CARBON_APIMGT_VERSION}"
+          git push origin HEAD:${GITHUB_REF_NAME}
+
+      - name: Build APIM distribution
+        working-directory: all-in-one-apim
+        run: |
+          mvn -B clean install -Dmaven.test.skip=true
+
+      - name: Upload APIM distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apim-distribution-${{ env.LATEST_CARBON_APIMGT_VERSION }}
+          path: |
+            all-in-one-apim/modules/distribution/**/target/*.zip
+            all-in-one-apim/modules/distribution/**/target/*.tar.gz
+          if-no-files-found: warn
