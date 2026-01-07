@@ -114,7 +114,7 @@ jobs:
       - name: Build APIM Product (Skip Tests)
         run: |
           echo "Building APIM product distribution (skipping tests)..."
-          mvn clean install -DskipTests \
+          mvn clean install -Dmaven.test.skip=true -DskipTests \
             --file all-in-one-apim/pom.xml
           
           # Verify the distribution zip was created
