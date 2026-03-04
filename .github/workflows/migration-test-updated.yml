@@ -62,17 +62,17 @@ jobs:
           echo "Current carbon-apimgt version: $CURRENT"
           echo "CURRENT_CARBON_APIMGT_VERSION=$CURRENT" >> $GITHUB_ENV
 
-      - name: Update pom.xml with latest carbon-apimgt version
-        if: env.LATEST_CARBON_APIMGT_VERSION != '' && env.LATEST_CARBON_APIMGT_VERSION != env.CURRENT_CARBON_APIMGT_VERSION
-        working-directory: all-in-one-apim
-        run: |
-          echo "Updating ${CARBON_APIMGT_VERSION_PROPERTY} from ${CURRENT_CARBON_APIMGT_VERSION} to ${LATEST_CARBON_APIMGT_VERSION}"
-
-          mvn -B \
-            org.codehaus.mojo:versions-maven-plugin:2.16.2:set-property \
-            -Dproperty=${CARBON_APIMGT_VERSION_PROPERTY} \
-            -DnewVersion=${LATEST_CARBON_APIMGT_VERSION} \
-            -DgenerateBackupPoms=false
+#      - name: Update pom.xml with latest carbon-apimgt version
+#        if: env.LATEST_CARBON_APIMGT_VERSION != '' && env.LATEST_CARBON_APIMGT_VERSION != env.CURRENT_CARBON_APIMGT_VERSION
+#        working-directory: all-in-one-apim
+#        run: |
+#          echo "Updating ${CARBON_APIMGT_VERSION_PROPERTY} from ${CURRENT_CARBON_APIMGT_VERSION} to ${LATEST_CARBON_APIMGT_VERSION}"
+#
+#          mvn -B \
+#            org.codehaus.mojo:versions-maven-plugin:2.16.2:set-property \
+#            -Dproperty=${CARBON_APIMGT_VERSION_PROPERTY} \
+#            -DnewVersion=${LATEST_CARBON_APIMGT_VERSION} \
+#            -DgenerateBackupPoms=false
 
       - name: Build APIM distribution
         working-directory: all-in-one-apim
@@ -1003,22 +1003,22 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Update pom.xml and push version bump
-        if: needs.update-and-build.outputs.latest_version != '' && needs.update-and-build.outputs.latest_version != needs.update-and-build.outputs.current_version
-        working-directory: all-in-one-apim
-        run: |
-          LATEST="${{ needs.update-and-build.outputs.latest_version }}"
-          echo "Bumping ${CARBON_APIMGT_VERSION_PROPERTY} from ${{ needs.update-and-build.outputs.current_version }} to $LATEST"
-          mvn -B \
-            org.codehaus.mojo:versions-maven-plugin:2.16.2:set-property \
-            -Dproperty=${CARBON_APIMGT_VERSION_PROPERTY} \
-            -DnewVersion=$LATEST \
-            -DgenerateBackupPoms=false
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git commit -am "chore: bump carbon-apimgt to $LATEST"
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+#      - name: Update pom.xml and push version bump
+#        if: needs.update-and-build.outputs.latest_version != '' && needs.update-and-build.outputs.latest_version != needs.update-and-build.outputs.current_version
+#        working-directory: all-in-one-apim
+#        run: |
+#          LATEST="${{ needs.update-and-build.outputs.latest_version }}"
+#          echo "Bumping ${CARBON_APIMGT_VERSION_PROPERTY} from ${{ needs.update-and-build.outputs.current_version }} to $LATEST"
+#          mvn -B \
+#            org.codehaus.mojo:versions-maven-plugin:2.16.2:set-property \
+#            -Dproperty=${CARBON_APIMGT_VERSION_PROPERTY} \
+#            -DnewVersion=$LATEST \
+#            -DgenerateBackupPoms=false
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#          if git diff --quiet; then
+#            echo "No changes to commit."
+#            exit 0
+#          fi
+#          git commit -am "chore: bump carbon-apimgt to $LATEST"
+#          git push origin HEAD:${GITHUB_REF#refs/heads/}
