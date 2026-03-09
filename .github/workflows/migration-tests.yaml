@@ -980,6 +980,7 @@ jobs:
           name: migration-test-reports
           path: |
             all-in-one-apim/modules/integration-v2/tests-integration/**/target/surefire-reports/**
+            all-in-one-apim/modules/integration-v2/tests-integration/**/target/cucumber-report/**
           if-no-files-found: warn
 
   version-bump:
