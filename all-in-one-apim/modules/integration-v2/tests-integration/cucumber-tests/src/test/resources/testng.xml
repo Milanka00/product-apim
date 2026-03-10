@@ -5,6 +5,8 @@
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.ParallelToggleAlterSuiteListener"/>
         <!-- Add <test> name to MDC for per-test logs -->
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.TestNameMdcListener"/>
+        <!-- Append APIM server logs to failure exception for Surefire/CI reports -->
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.ApimLogsOnFailureListener"/>
     </listeners>
     <test name="CucumberTests">
         <classes>
