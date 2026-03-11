@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pack_url:
-        description: 'https://github.com/wso2/product-apim/releases/download/v4.7.0-m2/wso2am-4.7.0-m2.zip'
+        description: 'URL to APIM distribution zip (e.g. wso2am-*-SNAPSHOT.zip or wso2am-4.x.x.zip)'
         required: true
         type: string
 
