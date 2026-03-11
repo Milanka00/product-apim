@@ -201,6 +201,14 @@ jobs:
             exit 1
           fi
 
+          # Normalize name so Maven/testcontainers and Docker build find the expected file (wso2am-4.7.0-SNAPSHOT.zip)
+          NORMALIZED_NAME="wso2am-4.7.0-SNAPSHOT.zip"
+          if [ "$(basename "$TARGET_PATH")" != "$NORMALIZED_NAME" ]; then
+            cp "$TARGET_PATH" "$TARGET_DIR/$NORMALIZED_NAME"
+            echo "Also created $NORMALIZED_NAME for compatibility with Maven/testcontainers"
+            ls -lh "$TARGET_DIR/$NORMALIZED_NAME"
+          fi
+
       - name: Install dependencies
         run: |
           sudo apt-get update
